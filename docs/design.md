@@ -30,6 +30,9 @@ rules, so there are many good cities to find but most random layouts don't work.
 1. The power plant adds 1 generator.
 2. Draw 1 card (after the player's first House is placed).
 3. Place buildings, move them, and put generators into buildings and racks.
+   Everything on the map can be dragged: a building from the list onto a lot, a ⚡ from
+   "to place" onto a building or rack, the Insurance shield onto a building, and a building
+   on the map to another lot. Taps do the same things.
 4. End the turn.
 
 Everyone starts with 5 generators. When someone powers all 8 buildings and all 4 racks,
@@ -56,6 +59,11 @@ If more than one city finishes, the one built with the most clean power wins.
 | Theft Insurance | 2 | Blocks the next Power Grab or Envy Country |
 | Firewall Upgrade | 2 | Blocks the next Server Outage |
 
+A card that can't do anything right now goes back into the deck at a random spot, and the
+player's draw for that turn is used up. For example: Insurance with no building to insure,
+Power Grab or Envy Country when no rival has generators to take, Smart Grid, Heat Wave or
+Server Outage with no server racks running, and Protest when there is nothing to lose.
+
 Losses come from unplaced generators first, then from unfinished, uninsured buildings.
 If Diesel or Nuclear hits a Hospital or School that has no power yet, the smoke takes
 generators from the rest of the city instead, so placing those buildings last doesn't dodge it.
@@ -66,3 +74,9 @@ generators from the rest of the city instead, so placing those buildings last do
 With the numbers above, a 2-player game takes about 14–15 turns per player (range 11–19),
 each player loses about 7 generators to trouble, and no game gets stuck. A 4-player game
 takes about 14 turns. Aim to keep changes inside 12–18 turns with no stuck games.
+
+## The computer player
+
+The computer plans its whole city on its first turn, one building at a time, then draws a
+card and spends its generators. It pauses on every move (`BOT_PACE` in `index.html`) so
+players can follow along on its map and on the TV.

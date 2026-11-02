@@ -135,7 +135,9 @@ header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16p
 .mv{position:static;margin-top:5px;border-radius:999px;font-family:var(--round);font-weight:700;font-size:11px;padding:2px 8px;min-height:26px;color:var(--teal);background:var(--teal-soft);border:1.5px solid transparent}
 .mv:hover{border-color:var(--teal)}
 .mv.on{background:var(--teal);color:#fff}
-.map.active .lot:not(.empty){touch-action:none;cursor:grab}
+.map.active .lot:not(.empty),.map.active .pal:not([disabled]),[data-topbank],.map.active [data-bankchip]{touch-action:none;cursor:grab}
+.gen-ghost{display:grid;place-items:center;background:#fff6dc;border:2px solid var(--ink);border-radius:50%}.gen-ghost .bolt{width:34px;height:34px}
+.rack.drop-ok .server{box-shadow:0 0 0 4px rgba(242,193,78,.6)}.rack.drop-here .server{box-shadow:0 0 0 6px var(--sun)}
 .lot.lifted{opacity:.35;border-style:dashed}
 .lot.drop-ok{box-shadow:0 0 0 4px rgba(72,120,144,.45)}
 .lot.drop-here{transform:scale(1.05);box-shadow:0 0 0 5px var(--teal)}
@@ -355,6 +357,8 @@ header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16p
 .card .changes li.good{background:#dff3e6;color:#1f6b45}.card .changes li.bad{background:var(--rose-soft);color:#8f2437}
 @media (prefers-reduced-motion:reduce){.pop{opacity:1}}
 
+.card .backtag{margin:10px 16px 0;font-family:var(--round);font-size:13px;color:#8a5b00;background:#fff0c2;border:2px dashed #c99a1f;border-radius:10px;padding:4px 8px}
+.card.is-back .pic{filter:grayscale(.6) opacity(.7)}
 /* ---------- mayors + news ---------- */
 .mayor{display:flex;gap:12px;align-items:center;padding:8px;border-radius:16px;border:2px solid transparent}
 .mayor.cur{border-color:var(--ink);background:#fff}
@@ -714,13 +718,13 @@ function smokeHit(p, type, n) {
 }
 
 function resolveCard(p, id) {
-  const c = CARDS[id]; let res = '', tone = 'good', pending = null;
+  const c = CARDS[id]; let res = '', tone = 'good', pending = null, back = null;
   switch (id) {
     case 'grid': case 'gen': p.bank += 1; p.stats.other += 1; res = '+1 generator to place.'; break;
     case 'theft': p.theft = (p.theft || 0) + 1; res = 'The next time someone tries to steal from you, it’s blocked.'; tone = 'shield'; break;
     case 'grab': {
       const rivals = G.players.filter(x => x !== p && x.bank > 0);
-      if (!rivals.length) res = 'No rival has any generators waiting to be placed.';
+      if (!rivals.length) back = 'No rival has any generators to grab yet.';
       else { pending = 'grab'; res = 'Choose a rival to grab power from.'; }
       tone = 'mixed'; break;
     }
@@ -729,31 +733,37 @@ function resolveCard(p, id) {
     case 'diesel': { p.bank += 4; p.stats.dirty += 4; const h = smokeHit(p, 'hospital', 1); res = '+4 generators.' + h; if (/lost|cost/.test(h)) tone = 'mixed'; break; }
     case 'nuclear': { p.bank += 6; p.stats.dirty += 6; const h = smokeHit(p, 'school', 3); res = '+6 generators.' + h; if (/lost|cost/.test(h)) tone = 'mixed'; break; }
     case 'protest': {
+      if (!p.bank && !p.grid.some(b => b && !b.insured && !done(b) && b.gens > 0)) { back = 'You have no generators for the protest to take.'; break; }
       const l = loseGens(p, 2);
       res = l ? `You lost ${plural(l, 'generator')}.` : 'You had nothing to lose. Phew!'; tone = l ? 'bad' : 'good'; break;
     }
-    case 'insurance': p.ins++; res = p.grid.some(b => b && !b.insured) ? 'Pick one of your buildings to protect.' : 'No buildings yet, so you’ll keep it for later.'; pending = 'insure'; tone = 'shield'; break;
+    case 'insurance':
+      if (!p.grid.some(b => b && !b.insured)) { back = 'You don’t have a building to insure yet.'; break; }
+      p.ins++; res = 'Drag the shield onto a building to protect it, or tap a building.'; pending = 'insure'; tone = 'shield'; break;
     case 'overload': p.bank += 3; p.stats.other += 3; p.skip = true; res = '+3 generators, but you’ll skip your next turn.'; tone = 'mixed'; break;
     case 'firewall': p.firewall = true; res = 'Your servers are protected from the next Server Outage.'; tone = 'shield'; break;
     case 'outage': {
       if (p.firewall) { p.firewall = false; res = 'Your Firewall blocked it!'; tone = 'shield'; break; }
       const idx = [3, 2, 1, 0].find(i => p.racks[i] > 0);
-      if (idx === undefined) { res = 'You have no servers yet, so nothing broke.'; break; }
+      if (idx === undefined) { back = 'You have no servers powered yet, so there’s nothing to break.'; break; }
       p.racks[idx]--; p.stats.lost++; res = `Server rack ${idx + 1} lost a generator.`; tone = 'bad'; break;
     }
     case 'heat': {
-      const n = online(p); const l = n ? loseGens(p, n) : 0;
-      res = n === 0 ? 'No servers powered yet, so no cooling needed.' : `Cooling your ${plural(n, 'rack')} cost ${l} ⚡.`; tone = n ? 'bad' : 'good'; break;
+      const n = online(p);
+      if (!n) { back = 'You have no servers running yet, so nothing needs cooling.'; break; }
+      const l = loseGens(p, n); res = `Cooling your ${plural(n, 'rack')} cost ${l} ⚡.`; tone = 'bad'; break;
     }
-    case 'smart': { const n = online(p); p.bank += n; p.stats.other += n; res = n ? `Your Data Center’s AI found +${n} ⚡!` : 'No servers powered yet, so there’s no AI to help.'; tone = n ? 'good' : 'mixed'; break; }
+    case 'smart': { const n = online(p); if (!n) { back = 'You have no servers running yet, so there’s no AI to help.'; break; } p.bank += n; p.stats.other += n; res = `Your Data Center’s AI found +${n} ⚡!`; break; }
     case 'envy': {
       const rivals = G.players.filter(x => x !== p && x.bank > 0);
-      if (!rackSpace(p)) res = 'Your Data Center is already full!';
-      else if (!rivals.length) res = 'No rival has any generators waiting to be placed.';
+      if (!rackSpace(p)) back = 'Your Data Center is already full.';
+      else if (!rivals.length) back = 'No rival has any generators to take yet.';
       else { pending = 'envy'; res = 'Choose a rival to take power from.'; }
       tone = 'mixed'; break;
     }
   }
+  // A card that can't do anything right now is shuffled back into the deck for later.
+  if (back) { G.energy.splice(Math.floor(Math.random() * (G.energy.length + 1)), 0, id); return { res: back + ' This card goes back into the deck.', tone: 'mixed', pending: null, card: c, id, back: true }; }
   return { res, tone, pending, card: c, id };
 }
 
@@ -825,7 +835,7 @@ function draw() {
   sfx(r.tone === 'bad' ? 'bad' : r.tone === 'mixed' ? 'mixed' : 'good');
   if (!p.bot && (r.pending === 'envy' || r.pending === 'grab')) G.pending = r.pending;
   // a bot never covers a window the player opened (help, new game)
-  if (!ui.overlay || ui.overlay.type === 'card') ui.overlay = { type: 'card', id, res: r.res, tone: r.tone, pending: r.pending, who: p.name, bot: p.bot, ch };
+  if (!ui.overlay || ui.overlay.type === 'card') ui.overlay = { type: 'card', id, res: r.res, tone: r.tone, pending: r.pending, who: p.name, bot: p.bot, ch, back: r.back };
   render();
   return r;
 }
@@ -847,7 +857,7 @@ function closeCard() {
   const o = ui.overlay; if (!o || o.type !== 'card' || o.bot) return;
   ui.overlay = null;
   const p = cur();
-  if (o.pending === 'insure' && p.grid.some(b => b && !b.insured)) { ui.sel = 'insure'; toast('Tap a building to insure it. You can also save it for later.'); }
+  if (o.pending === 'insure' && p.grid.some(b => b && !b.insured)) { ui.sel = 'insure'; toast('Drag the shield onto a building, or tap a building. You can also save it for later.'); }
   if (o.pending === 'envy' || o.pending === 'grab') ui.overlay = { type: 'steal', mode: o.pending };
   render();
 }
@@ -917,39 +927,89 @@ function onMoveBtn(i, ev) {
   render();
 }
 
-// Drag a building onto another lot to move or swap it. A short tap still adds a generator.
+// Drag and drop for everything on your map. Taps still work the same way.
+//   building from the list -> empty lot       (place it)
+//   ⚡ from "to place"     -> building or rack (power it)
+//   insurance shield      -> building         (protect it)
+//   building on the map   -> another lot      (move or swap)
 let drag = null, eatClick = false;
-document.addEventListener('pointerdown', e => {
+function dragSource(e) {
+  if (!humanTurn() || e.button > 0 || e.target.closest('[data-move]')) return null;
+  const p = cur(), mine = el => el && el.closest('.map.active');
+  const pick = e.target.closest('.map.active .pal[data-pick]:not([disabled])');
+  if (pick) return pick.dataset.pick === 'insure' ? (p.ins > 0 ? { kind: 'insure', el: pick } : null) : { kind: 'place', type: pick.dataset.pick, el: pick };
+  const bank = e.target.closest(`[data-topbank], [data-bankchip="${G.cur}"]`);
+  if (bank && p.bank > 0) return { kind: 'gen', el: bank };
   const lot = e.target.closest('.map.active .lot[data-cell]:not(.empty)');
-  if (!lot || e.target.closest('[data-move]') || !humanTurn() || ui.sel === 'insure' || e.button > 0) return;
-  if (drag && drag.ghost) drag.ghost.remove();
+  if (lot && mine(lot) && ui.sel !== 'insure') return { kind: 'move', from: +lot.dataset.cell, el: lot };
+  return null;
+}
+// Which lots and racks can take what's being dragged.
+function dropTargets(d) {
+  const p = cur(), cells = [], racks = [];
+  p.grid.forEach((b, i) => {
+    if (d.kind === 'place') cells[i] = !b && canPlace(p, i, d.type).ok;
+    if (d.kind === 'gen') cells[i] = !!b && !done(b);
+    if (d.kind === 'insure') cells[i] = !!b && !b.insured;
+  });
+  if (d.kind === 'move') moveTargets(p, d.from).forEach((ok, i) => { cells[i] = ok; });
+  if (d.kind === 'gen' && online(p) < RACKS) p.racks.forEach((r, i) => { racks[i] = r < RACK_COST; });
+  return { cells, racks };
+}
+function dragGhost(d) {
+  const r = d.el.getBoundingClientRect();
+  let g;
+  if (d.kind === 'gen') { g = document.createElement('div'); g.innerHTML = bolt(); Object.assign(g.style, { width: '54px', height: '54px' }); g.classList.add('gen-ghost'); }
+  else { g = d.el.cloneNode(true); ['data-cell', 'data-hit', 'data-pick', 'data-bankchip'].forEach(k => g.removeAttribute(k)); Object.assign(g.style, { width: r.width + 'px', height: r.height + 'px' }); }
+  g.classList.add('drag-ghost');
+  document.body.appendChild(g);
+  return g;
+}
+document.addEventListener('pointerdown', e => {
+  const src = dragSource(e); if (!src) return;
   document.querySelectorAll('.drag-ghost').forEach(g => g.remove());
-  drag = { from: +lot.dataset.cell, x: e.clientX, y: e.clientY, el: lot, ghost: null, over: null, id: e.pointerId };
+  drag = { ...src, x: e.clientX, y: e.clientY, ghost: null, over: null };
 });
 document.addEventListener('pointermove', e => {
   if (!drag) return;
   if (!drag.ghost) {
     if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 10) return;
-    const r = drag.el.getBoundingClientRect();
-    drag.ghost = drag.el.cloneNode(true); drag.ghost.classList.add('drag-ghost'); drag.ghost.removeAttribute('data-cell'); drag.ghost.removeAttribute('data-hit');
-    Object.assign(drag.ghost.style, { width: r.width + 'px', height: r.height + 'px' });
-    document.body.appendChild(drag.ghost); drag.el.classList.add('lifted');
-    drag.ok = moveTargets(cur(), drag.from);
-    document.querySelectorAll('.map.active .lot[data-cell]').forEach(l => { if (drag.ok[+l.dataset.cell]) l.classList.add('drop-ok'); });
+    drag.ghost = dragGhost(drag); drag.el.classList.add('lifted');
+    drag.ok = dropTargets(drag);
+    document.querySelectorAll('.map.active .lot[data-cell]').forEach(l => { if (drag.ok.cells[+l.dataset.cell]) l.classList.add('drop-ok'); });
+    document.querySelectorAll('.map.active .rack[data-rack]').forEach(r => { if (drag.ok.racks[+r.dataset.rack]) r.classList.add('drop-ok'); });
   }
   e.preventDefault();
   drag.ghost.style.left = e.clientX + 'px'; drag.ghost.style.top = e.clientY + 'px';
   const under = document.elementFromPoint(e.clientX, e.clientY);
-  const lot = under && under.closest('.map.active .lot[data-cell]');
-  if (drag.over && drag.over !== lot) drag.over.classList.remove('drop-here');
-  drag.over = lot; if (lot) lot.classList.add('drop-here');
+  const spot = under && under.closest('.map.active .lot[data-cell], .map.active .rack[data-rack]');
+  if (drag.over && drag.over !== spot) drag.over.classList.remove('drop-here');
+  drag.over = spot; if (spot) spot.classList.add('drop-here');
 }, { passive: false });
+function dropOn(d, spot) {
+  const p = cur(), cell = spot.dataset.cell !== undefined ? +spot.dataset.cell : null, rack = spot.dataset.rack !== undefined;
+  if (d.kind === 'move') { if (cell !== null) return tryMove(d.from, cell); return render(); }
+  if (d.kind === 'place') {
+    if (cell === null) return render();
+    ui.sel = d.type; return onCell(cell);
+  }
+  if (d.kind === 'insure') {
+    if (cell === null) { render(); return toast('Insurance protects city buildings. Drop it on a building.'); }
+    ui.sel = 'insure'; return onCell(cell);
+  }
+  if (d.kind === 'gen') {
+    if (rack) return onRack();
+    const b = cell !== null && p.grid[cell];
+    if (!b) { render(); return toast('Drop the generator on a building or a server rack.'); }
+    ui.sel = null; return onCell(cell);
+  }
+}
 function endDrag(e) {
   if (!drag) return;
   const d = drag; drag = null;
   if (!d.ghost) return;
   d.ghost.remove(); eatClick = true; setTimeout(() => { eatClick = false; }, 0);
-  if (d.over && e.type === 'pointerup') tryMove(d.from, +d.over.dataset.cell); else render();
+  if (d.over && e.type === 'pointerup') dropOn(d, d.over); else render();
 }
 document.addEventListener('pointerup', endDrag);
 document.addEventListener('pointercancel', endDrag);
@@ -980,12 +1040,19 @@ function botTarget(p) {
   return null;
 }
 
-// Lays out the whole city from the bot's plan: houses first so the hospital has a neighbor.
-function botPlanCity(p) {
+// Lays out the whole city from the bot's plan, one building at a time so players can watch:
+// houses first so the hospital has a neighbor.
+async function botPlanCity(p, alive) {
   if (!p.plan || !solve(typesOf(p))) p.plan = solve(typesOf(p), true);
   if (!p.plan) return;
   for (const t of ['house', 'factory', 'school', 'hospital'])
-    p.plan.forEach((pt, i) => { if (pt === t && !p.grid[i] && canPlace(p, i, t).ok) p.grid[i] = { type: t, gens: 0, insured: false }; });
+    for (let i = 0; i < 8; i++) {
+      if (p.plan[i] !== t || p.grid[i] || !canPlace(p, i, t).ok) continue;
+      if (!alive()) return;
+      p.grid[i] = { type: t, gens: 0, insured: false }; ui.hit = G.cur + 'c' + i;
+      ui.think = `${p.name} places a ${BNAME[t]}.`; sfx('plop'); render();
+      await sleep(BOT_PACE.place);
+    }
   log(`${p.name} finished planning their city.`);
 }
 
@@ -1001,24 +1068,28 @@ async function botSpend(p, g) {
   botInsure(p);
   while (G === g && !G.over && p.bank > 0) {
     const t = botTarget(p); if (!t) break;
-    addGen(p, t); render(); await sleep(140);
+    ui.think = t.kind === 'rack' ? `${p.name} powers a server rack at the Data Center.` : `${p.name} puts a generator in its ${BNAME[p.grid[t.i].type]}.`;
+    addGen(p, t); render(); await sleep(BOT_PACE.power);
   }
   botInsure(p);
 }
 
+// How long the computer pauses on each move (ms), slow enough for a kid to follow on the map and the TV.
+const BOT_PACE = { start: 1300, place: 700, think: 1500, card: 3200, step: 700, power: 650, end: 1100 };
 async function runBot() {
   const g = G, p = cur(), t = G.turn;
   if (botGame === g) return;
   botGame = g;
   const alive = () => G === g && !G.over && G.turn === t;
   try {
-    await sleep(650);
-    if (!allPlaced(p)) { botPlanCity(p); render(); await sleep(500); }
+    ui.think = `${p.name}’s turn. Watch the map below.`; render();
+    await sleep(BOT_PACE.start);
+    if (!allPlaced(p)) { await botPlanCity(p, alive); await sleep(BOT_PACE.step); }
     while (alive() && G.actions > 0) {
-      ui.think = `${p.name} draws a card…`; render(); await sleep(900);
+      ui.think = `${p.name} draws a card…`; render(); await sleep(BOT_PACE.think);
       if (!alive()) return;
       const r = draw();
-      await sleep(1500);
+      await sleep(BOT_PACE.card);
       if (!alive()) return;
       if (ui.overlay && ui.overlay.type === 'card') ui.overlay = null;
       if (r && (r.pending === 'envy' || r.pending === 'grab')) {
@@ -1027,10 +1098,11 @@ async function runBot() {
       }
       ui.think = ''; render();
       if (!alive()) return;
+      await sleep(BOT_PACE.step);
       await botSpend(p, g);
-      await sleep(250);
+      await sleep(BOT_PACE.step);
     }
-    if (alive()) await sleep(400);
+    if (alive()) { ui.think = `${p.name} ends its turn.`; render(); await sleep(BOT_PACE.end); }
   } finally { if (botGame === g) botGame = null; }
   if (alive()) endTurn();
 }
@@ -1145,7 +1217,7 @@ function mapView(p, idx) {
   const pal = TYPES.map(t => {
     const left = NEED[t] - count(p, t);
     return `<button class="pal ${ui.sel === t ? 'sel' : ''}" data-pick="${t}" ${left <= 0 || !live ? 'disabled' : ''} aria-pressed="${ui.sel === t}">${ico(t)}<span><b>${BNAME[t]}</b><small>${COST[t]} ⚡ · ${left} to place</small></span></button>`;
-  }).join('') + (p.ins > 0 ? `<button class="pal ins ${ui.sel === 'insure' ? 'sel' : ''}" data-pick="insure" ${live ? '' : 'disabled'}>${ico('shield')}<span><b>Insurance ×${p.ins}</b><small>tap, then tap a building</small></span></button>` : '');
+  }).join('') + (p.ins > 0 ? `<button class="pal ins ${ui.sel === 'insure' ? 'sel' : ''}" data-pick="insure" ${live ? '' : 'disabled'}>${ico('shield')}<span><b>Insurance ×${p.ins}</b><small>drag onto a building</small></span></button>` : '');
   const dead = active && !p.bot && !solve(typesOf(p));
   const mine = active && !p.bot;
   const dcMsg = dcDone ? 'ONLINE · running AI' : n ? `${n} of ${RACKS} racks powered` : 'dark · needs 8 ⚡';
@@ -1165,7 +1237,7 @@ function mapView(p, idx) {
       </div>
     </div>
     ${dead ? `<div class="note warn">${star('ico')} Heads up: the rest of your buildings can’t fit anymore. Drag a building to a new spot to make room.</div>` : ''}
-    ${mine && !hasHouse(p) && !(ui.tut) ? `<div class="note">${star('ico')} Start here: place your first House. Pick House below, then tap an empty lot. Then the deck unlocks, and you can place the rest of your city whenever you like.</div>` : ''}
+    ${mine && !hasHouse(p) && !(ui.tut) ? `<div class="note">${star('ico')} Start here: drag the House from the list below onto an empty lot. Then the deck unlocks, and you can place the rest of your city whenever you like.</div>` : ''}
     ${mine ? `<div class="palette">${pal}</div>` : ''}
     ${active ? `<div class="rules"><span class="rule">${ico('school')}<i>School:</i> not next to a Factory</span><span class="rule">${ico('hospital')}<i>Hospital:</i> next to a House, not next to a Factory</span><span class="rule" style="padding-left:10px">Next to = left, right, up or down</span><span class="rule" style="padding-left:10px">Tap any server rack to power the Data Center</span></div>` : ''}
   </section>`;
@@ -1206,11 +1278,12 @@ function newsPanel() {
 
 
 const KIND_LABEL = { clean: 'Clean energy', power: 'Power', dirty: 'Dirty energy', crisis: 'Trouble!', shield: 'Protection', ai: '> data center', steal: 'Sneaky move' };
-function cardView(id, res, tone, who, ch) {
+function cardView(id, res, tone, who, ch, back) {
   const c = CARDS[id];
   const bg = { good: 'var(--good)', bad: 'var(--rose)', mixed: '#b9852a', shield: 'var(--teal)' }[tone] || 'var(--good)';
-  return `<div class="card" role="dialog" aria-label="${esc(c.name)}">
+  return `<div class="card ${back ? 'is-back' : ''}" role="dialog" aria-label="${esc(c.name)}">
     <div class="band ${c.kind}">${KIND_LABEL[c.kind]}</div>
+    ${back ? '<div class="backtag">↩ Back into the deck</div>' : ''}
     ${who ? `<div class="by">${esc(who)} drew</div>` : ''}
     <div class="ttl">${esc(c.name)}</div>
     <div class="pic ${c.kind}">${ico(c.icon)}${c.kind === 'clean' ? star('star') : ''}</div>
@@ -1223,8 +1296,8 @@ function cardView(id, res, tone, who, ch) {
 
 function overlayView() {
   const o = ui.overlay;
-  if (o.type === 'card') return `<div class="ov" role="dialog" aria-modal="true"><div class="stack">${cardView(o.id, o.res, o.tone, o.who, o.ch)}
-    ${o.bot ? '' : `<button class="btn rose" data-a="closecard" id="card-ok">${o.pending === 'envy' ? 'Pick a rival' : o.pending === 'insure' ? 'Pick a building' : 'OK'}</button>`}</div></div>`;
+  if (o.type === 'card') return `<div class="ov" role="dialog" aria-modal="true"><div class="stack">${cardView(o.id, o.res, o.tone, o.who, o.ch, o.back)}
+    ${o.bot ? '' : `<button class="btn rose" data-a="closecard" id="card-ok">${o.pending === 'envy' ? 'Pick a rival' : o.pending === 'insure' ? 'Protect a building' : 'OK'}</button>`}</div></div>`;
   if (o.type === 'pass') { const p = cur(); return `<div class="ov"><div class="modal" style="text-align:center"><h2>${esc(p.name)}, it’s your turn!</h2>
     <p>${badge(p, G.cur)}</p><p>Your map has the rose outline.</p>
     <button class="btn rose" data-a="ready" id="ready" style="margin-top:10px">I’m ready</button></div></div>`; }
@@ -1255,7 +1328,7 @@ function overlayView() {
 function helpSteps() {
   return `<ol class="steps">
     <li>${bolt('ico')}<span><b>Everyone starts with ${START_BANK} generators.</b> Each turn your power plant adds ${INCOME}, then you draw 1 card from the Energy Deck everyone shares. Most cards give generators. Some bring trouble, like Protests and smoke. Some are sneaky: Power Grab takes generators a rival hasn’t placed yet, and Theft Insurance stops it.</span></li>
-    <li>${ico('house')}<span><b>Place your first House to start.</b> Pick a building and tap an empty lot. Place the rest whenever you like, even mid-game, and drag a building to move it or swap it. Tap a building to add generators to it. House 2 · School 4 · Factory 6 · Hospital 8.</span></li>
+    <li>${ico('house')}<span><b>Place your first House to start.</b> Drag a building onto an empty lot (or tap it, then tap a lot). Place the rest whenever you like, even mid-game, and drag buildings on the map to move or swap them. Drag a ⚡ onto a building, or tap the building, to power it. House 2 · School 4 · Factory 6 · Hospital 8.</span></li>
     <li>${ico('factory')}<span><b>Follow the city rules.</b> Schools and Hospitals need clean air, so keep them away from Factories. A Hospital also needs a House next door.</span></li>
     <li><svg class="ico" viewBox="0 0 48 48"><use href="#i-bot"/></svg><span><b>Power the Data Center.</b> Out past the highway sits your city’s Data Center. It runs AI, and AI needs a lot of electricity: 4 server racks, 2 generators each.</span></li>
     <li>${star('ico')}<span><b>Win</b> by powering all 8 buildings and all 4 server racks. When someone finishes, everyone else gets one last turn. If more than one city finishes, the one built with the most clean power wins.</span></li>
@@ -1321,11 +1394,8 @@ function tutFinish(skipped) {
 const TUT_STEPS = [
   { at: '.map.active .map-top', title: 'Welcome, Mayor!', next: 'OK',
     text: () => 'This is your city map. Your job: power every building downtown, and the Data Center at the edge of town. Your rival builds their own city on the map below, with the same cards and the same weather. Let’s build your first House!' },
-  { at: '.map.active .palette', title: 'Pick a building',
-    text: () => 'Every city starts with a House. Tap House to pick it. A House needs 2 generators to light up.',
-    done: p => ui.sel === 'house' || hasHouse(p) },
-  { at: '.map.active .town .lots', title: 'Place it',
-    text: () => 'Now tap any empty lot downtown to put your House there.',
+  { at: '.map.active', free: true, title: 'Place your first House',
+    text: () => 'Every city starts with a House. Drag the House from the list under your map onto any empty lot downtown. (You can also tap House, then tap a lot.)',
     done: p => hasHouse(p) },
   { at: '.map.active .rules', title: 'City rules', next: 'OK',
     text: () => 'Schools and Hospitals need clean air, so they can’t go next to a Factory. A Hospital also needs a House next door. Next to means left, right, up or down.' },
@@ -1334,13 +1404,13 @@ const TUT_STEPS = [
     done: () => G.actions < DRAWS },
   { at: '.tv', title: 'Watch the news', next: 'OK',
     text: () => 'Every card you or your rivals draw is announced on Energy City News.' },
-  { at: () => $('.map.active .town .lot:not(.empty):not(.done)') || $('.map.active .town'), title: 'Power your building',
-    text: p => p.bank > 0 ? 'See “⚡ to place” on your map? Those are your generators. Tap your building to put one in. Fill it up to light it up!' : 'You have no generators to place yet. Draw another card to get some.',
+  { at: '.map.active', free: true, title: 'Power your building',
+    text: p => p.bank > 0 ? 'See “⚡ to place” at the top of your map? Those are your generators. Drag one onto your House, or just tap the House. Fill it up to light it up!' : 'You have no generators to place yet. Draw another card to get some.',
     done: p => p.grid.some(b => b && b.gens > 0) || (G.actions === 0 && p.bank === 0) },
   { at: '.map.active .palette', title: 'Build the rest', next: 'OK',
-    text: () => 'Place the rest of your buildings whenever you like: 4 Houses, 2 Factories, 1 School and 1 Hospital. Changed your mind? Drag a building to a new spot.' },
+    text: () => 'Drag the rest of your buildings onto your map whenever you like: 4 Houses, 2 Factories, 1 School and 1 Hospital. Changed your mind? Drag a building on the map to a new spot.' },
   { at: '.map.active .dc', title: 'The Data Center', next: 'OK',
-    text: () => 'Out past the highway is your Data Center. It runs AI, and AI needs a lot of electricity: 8 generators. Tap a server rack any time to power it. You need it to win!' },
+    text: () => 'Out past the highway is your Data Center. It runs AI, and AI needs a lot of electricity: 8 generators. Drag a ⚡ onto a server rack, or tap it, to power it. You need it to win!' },
   { at: '[data-a="end"]', title: 'End your turn',
     text: () => 'Done for this turn? Tap End turn and the next mayor goes. Generators you don’t place stay in “to place” for next turn.',
     done: () => ui.tut && ui.tut.ended },

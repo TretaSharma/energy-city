@@ -11,9 +11,11 @@ tablets and laptops, with no accounts and no install.
 
 - Everyone starts with **5 generators**. Each turn your power plant adds **+1**, then you
   **draw 1 card** from the Energy Deck everyone shares.
-- **Place your first House to start.** Place the rest of your buildings whenever you
-  like, and drag a building to move it or swap it.
-- Tap a building to put generators into it. House 2 · School 4 · Factory 6 · Hospital 8.
+- **Place your first House to start.** Drag buildings onto your map whenever you like,
+  and drag them around to move or swap them.
+- Drag a ⚡ from "to place" onto a building (or tap the building) to power it.
+  House 2 · School 4 · Factory 6 · Hospital 8.
+- A card that can't do anything right now goes back into the deck.
 - **City rules:** Schools and Hospitals need clean air, so they can't go next to a
   Factory. A Hospital also needs a House next door. ("Next to" means left, right, up or down.)
 - Out past the highway sits your **Data Center**: 4 server racks, 2 generators each.
