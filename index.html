@@ -234,7 +234,7 @@ header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16p
 .map .server{width:min(100%,92px)}
 .map .rack .lbl{font-size:15px;margin-top:5px}
 .map .bay .bolt{width:16px;height:16px}
-@container (max-width:640px){.terrain{grid-template-columns:minmax(0,1fr)}.link{min-height:56px}
+@container (max-width:520px){.terrain{grid-template-columns:minmax(0,1fr)}.link{min-height:56px}
   .link .road{top:50%;bottom:auto;left:-18px;right:-18px;width:auto;height:34px;transform:translateY(-50%);border-inline:0;border-block:2px solid var(--ink)}
   .link .road::after{left:0;right:0;top:50%;width:auto;height:3px;transform:translateY(-50%);background:repeating-linear-gradient(90deg,var(--sun) 0 12px,transparent 12px 24px)}
   .link .cable{left:38%;right:auto;top:-8px;bottom:-8px;width:4px;height:auto;background:repeating-linear-gradient(180deg,var(--ink) 0 8px,transparent 8px 13px)}
@@ -334,7 +334,9 @@ header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16p
 .maps.n2 .map .dc-head{margin-bottom:6px;gap:6px}
 .maps.n2 .map .dc-head .t{font-size:19px}.maps.n2 .map .dc-head .t .ico{font-size:24px}
 .maps.n2 .dc-st{font-size:14px;padding:2px 6px}
-.maps.n2 .map .racks{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.maps.n2 .terrain{grid-template-columns:minmax(0,1fr) 44px minmax(150px,.46fr)}
+.maps.n2 .map .racks{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+@container (max-width:520px){.maps.n2 .terrain{grid-template-columns:minmax(0,1fr)}.maps.n2 .map .racks{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .maps.n2 .map .server{width:min(100%,60px);border-radius:14px 14px 9px 9px}
 .maps.n2 .map .bay .bolt{width:11px;height:11px}
 .maps.n2 .map .rack .lbl{font-size:12px;margin-top:3px}
@@ -359,6 +361,30 @@ header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16p
 
 .card .backtag{margin:10px 16px 0;font-family:var(--round);font-size:13px;color:#8a5b00;background:#fff0c2;border:2px dashed #c99a1f;border-radius:10px;padding:4px 8px}
 .card.is-back .pic{filter:grayscale(.6) opacity(.7)}
+
+/* ---------- desktop: the whole game on one screen ---------- */
+@media (min-width:1000px){
+  .wrap{max-width:1560px}
+  body.in-game{padding-block:10px 8px}
+  .in-game header{margin-bottom:8px}
+  .in-game .logo{font-size:32px}
+  .top.game-top-compact{grid-template-columns:minmax(0,1fr) 380px;gap:16px;margin-bottom:14px;align-items:stretch}
+  .game-top-compact .turn{margin-bottom:8px}
+  .game-top-compact .table{margin-bottom:0}
+  .game-top-compact .deck{min-height:76px;padding:10px 12px 10px 74px}
+  .game-top-compact .deck .art{width:46px;height:46px;font-size:32px;left:12px}
+  .game-top-compact .deck b{font-size:20px}
+  .game-top-compact .bank{padding:6px 12px}.game-top-compact .bank .n{font-size:34px}.game-top-compact .bank .n .bolt{width:28px;height:28px}
+  .game-top-compact .tv{padding-top:20px}
+  .game-top-compact .ant{width:90px;height:24px}.game-top-compact .ant i{height:28px}
+  .game-top-compact .legs{display:none}
+  .game-top-compact .tv-body{padding:8px;border-radius:20px;box-shadow:0 5px 0 var(--ink)}
+  .game-top-compact .screen{min-height:98px;padding:22px 12px 28px}
+  .game-top-compact .hl{font-size:18px}
+  .game-top-compact .panel-r{width:26px}.game-top-compact .panel-r i{width:18px;height:18px}
+  .in-game .doodle{display:none}
+}
+
 /* ---------- mayors + news ---------- */
 .mayor{display:flex;gap:12px;align-items:center;padding:8px;border-radius:16px;border:2px solid transparent}
 .mayor.cur{border-color:var(--ink);background:#fff}
@@ -1140,8 +1166,36 @@ function render() {
   const ovBtn = $('#ov button');
   const el = (ui.overlay && ovBtn) ? (fk && $('#ov ' + fk)) || ovBtn : fk && document.querySelector(fk);
   if (el && el.focus) el.focus({ preventScroll: true });
+  fitScreen();
   tutRender();
 }
+
+// On a desktop the whole board fills the window with no scrolling. The board's width is chosen so
+// that, scaled to the screen's width, it is just as tall as the screen; then it's scaled to fit.
+let fitW = null;
+function fitScreen(full) {
+  const app = $('#app'); if (!app) return;
+  document.body.classList.toggle('in-game', !!G);
+  if (!G || innerWidth < 1000 || innerHeight < 560) { app.style.zoom = ''; app.style.width = ''; app.style.maxWidth = ''; app.style.marginTop = ''; fitW = null; return; }
+  const pad = parseFloat(getComputedStyle(document.body).paddingBottom);
+  const avH = innerHeight - 6, avW = innerWidth - 32;
+  const tallAt = w => { app.style.zoom = ''; app.style.marginTop = ''; app.style.maxWidth = 'none'; app.style.width = w + 'px'; return app.offsetTop + app.scrollHeight + pad; };
+  if (full || !fitW) {
+    // A narrower board scales up more, so it fills more height. Find the narrowest one that still fits.
+    let lo = 1100, hi = Math.max(lo, Math.min(avW, 1800));
+    if (avW / lo * tallAt(lo) <= avH) hi = lo;
+    else for (let k = 0; k < 7; k++) { const mid = (lo + hi) / 2; if (avW / mid * tallAt(mid) <= avH) hi = mid; else lo = mid; }
+    fitW = Math.round(hi);
+  }
+  const h = tallAt(fitW);
+  const z = Math.max(0.6, Math.min(1.6, avH / h, avW / fitW));
+  app.style.zoom = z.toFixed(3);
+  // Split any space left over above and below, so the board sits in the middle of the screen.
+  const spare = avH - h * z;
+  if (spare > 8) app.style.marginTop = (spare / 2 / z).toFixed(1) + 'px';
+}
+let fitRaf = 0;
+addEventListener('resize', () => { cancelAnimationFrame(fitRaf); fitRaf = requestAnimationFrame(() => fitScreen(true)); });
 function _render() {
   const app = $('#app');
   if (!G) { app.innerHTML = setupView(); $('#ov').innerHTML = ui.overlay ? overlayView() : ''; return; }
