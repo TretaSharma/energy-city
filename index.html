@@ -385,6 +385,10 @@ header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16p
   .in-game .doodle{display:none}
 }
 
+.madeby{text-align:right;font-family:var(--round);font-size:13px;color:var(--ink-soft);padding:14px 4px 2px;position:relative;z-index:1}
+.madeby a{color:var(--rose);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px}
+.madeby a:hover{color:var(--teal)}
+.in-game .madeby{padding:8px 0 0;font-size:12px}
 /* ---------- mayors + news ---------- */
 .mayor{display:flex;gap:12px;align-items:center;padding:8px;border-radius:16px;border:2px solid transparent}
 .mayor.cur{border-color:var(--ink);background:#fff}
@@ -1210,7 +1214,7 @@ function _render() {
       </div>
     </header>
     <div class="top ${G.players.length > 1 ? 'game-top-compact' : ''}"><div class="controls">${turnBar(p)}${decks(p)}</div><aside class="side">${newsPanel()}</aside></div>
-    <div class="maps n${G.players.length}">${G.players.map((x, i) => mapView(x, i)).join('')}</div>`;
+    <div class="maps n${G.players.length}">${G.players.map((x, i) => mapView(x, i)).join('')}</div>${madeBy()}`;
   $('#ov').innerHTML = ui.overlay ? overlayView() : '';
   const dc = $('.map.active .dc'); if (dc) dc.prepend(mxCanvas);
   if (ui.hit) { const el = document.querySelector(`[data-hit="${ui.hit}"]`); if (el) el.classList.add('hit'); ui.hit = null; }
@@ -1405,8 +1409,9 @@ function setupView() {
       <button class="btn rose big" data-a="start">Start building</button>
     </section>
     <section class="paper"><h3>How to play</h3>${helpSteps()}</section>
-  </div></div>`;
+  </div>${madeBy()}</div>`;
 }
+function madeBy() { return `<footer class="madeby">Made by <a href="https://tretasharma.com" target="_blank" rel="noopener">Treta Sharma</a></footer>`; }
 
 // ---------- matrix rain behind the Data Center ----------
 const mxCanvas = document.createElement('canvas');
