@@ -24,7 +24,8 @@ Object.assign(globalThis, {
   matchMedia: () => ({ matches: false }),
   document: { querySelector: () => blank(), querySelectorAll: () => [], createElement: blank, addEventListener() {}, activeElement: null, body: blank() },
   localStorage: { getItem: () => '1', setItem() {}, removeItem() {} },
-  requestAnimationFrame: () => 0, cancelAnimationFrame() {}, addEventListener() {}, innerWidth: 1200, innerHeight: 800,
+  requestAnimationFrame: () => 0, cancelAnimationFrame() {}, addEventListener() {}, getComputedStyle: () => ({ paddingBottom: '0' }),
+  innerWidth: 800, innerHeight: 800, // phone-sized, so the desktop fit-to-screen code stays out of the way
 });
 
 const game = new Function(code + '\n;return { startGame, state: () => G };')();
